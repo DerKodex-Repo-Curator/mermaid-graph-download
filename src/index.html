@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid 编辑器</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            height: 100vh;
+            background-color: #f8f9fa;
+        }
+        .container {
+            display: flex;
+            gap: 12px;
+            height: calc(100vh - 60px);
+            padding: 16px;
+            box-sizing: border-box;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .editor {
+            flex: 0 0 380px; /* 固定宽度实现窄长效果 */
+            background: #ffffff;
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        }
+        .preview {
+            flex: 1;
+            background: #ffffff;
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            min-width: 400px; 
+        }
+        textarea {
+            width: 100%;
+            flex: 1;
+            border: none !important; /* 完全去除边框 */
+            padding: 14px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 13px;
+            line-height: 1.7;
+            resize: none;
+            background: #f8f9fa;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea:focus {
+            outline: 2px solid #e7f5ff;
+            background: white;
+        }
+        .preview-container {
+            flex: 1;
+            background: white;
+            border-radius: 6px;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.03);
+        }
+        .controls {
+            margin-top: 12px;
+            display: flex;
+            gap: 6px;
+        }
+        button {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.15s;
+            background: #495057;
+            color: white;
+            font-size: 13px;
+        }
+        button:hover {
+            background: #343a40;
+            transform: none;
+        }
+        h1 {
+            color: #212529;
+            padding: 14px 20px;
+            margin: 0;
+            background: white;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                height: auto;
+                padding: 12px;
+            }
+            .editor {
+                flex: none;
+                width: 100%;
+                height: 50vh;
+            }
+            .preview {
+                flex: none;
+                width: 100%;
+                height: 60vh;
+                min-width: auto;
+            }
+            textarea {
+                font-size: 12.5px;
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Mermaid 图表编辑器</h1>
+    <div class="container">
+        <div class="editor">
+            <h2>编辑代码</h2>
+            <textarea id="mermaid-code" placeholder="输入Mermaid代码...">graph TD
+    A[开始] --> B(处理)
+    B --> C{决策}
+    C -->|是| D[结束]
+    C -->|否| B</textarea>
+            <div class="controls">
+                <button id="render-btn">渲染预览</button>
+                <button id="download-btn">下载PNG</button>
+            </div>
+        </div>
+        <div class="preview">
+            <h2>实时预览</h2>
+            <div class="preview-container" id="mermaid-preview">
+                <!-- SVG 内容将插入到这里 -->
+            </div>
+            <div class="controls">
+                <button id="zoom-in-btn">+</button>
+                <button id="zoom-out-btn">-</button>
+                <button id="reset-zoom-btn">重置</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Mermaid
+        mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+        const codeEditor = document.getElementById('mermaid-code');
+        const previewDiv = document.getElementById('mermaid-preview');
+        const renderBtn = document.getElementById('render-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const zoomInBtn = document.getElementById('zoom-in-btn');
+        const zoomOutBtn = document.getElementById('zoom-out-btn');
+        const resetZoomBtn = document.getElementById('reset-zoom-btn');
+
+        let currentScale = 1; // 当前缩放比例
+
+        // 渲染函数
+        async function renderMermaid() {
+            const code = codeEditor.value;
+            try {
+                // 使用 mermaidAPI 渲染 SVG
+                const { svg } = await mermaid.mermaidAPI.render('mermaid-svg', code);
+                previewDiv.innerHTML = ''; // 清空之前的预览内容
+                const svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svgElement.innerHTML = svg;
+                svgElement.classList.add('preview-svg'); // 添加样式类
+                previewDiv.appendChild(svgElement);
+
+                // 重置缩放比例
+                currentScale = 1;
+                svgElement.style.transform = `scale(${currentScale})`;
+            } catch (error) {
+                previewDiv.innerHTML = `<div style="color:red">渲染错误: ${error.message}</div>`;
+            }
+        }
+        async function downloadPNG() {
+            try {
+                const svgElement = previewDiv.querySelector('.preview-svg');
+                if (!svgElement) throw new Error('未找到SVG内容');
+    
+                // 创建临时容器
+                const tempContainer = document.createElement('div');
+                const clonedSVG = svgElement.cloneNode(true);
+    
+                // 处理viewBox
+                let viewBox = clonedSVG.getAttribute('viewBox');
+                if (!viewBox) {
+                    const width = parseFloat(clonedSVG.getAttribute('width')) || 800;
+                    const height = parseFloat(clonedSVG.getAttribute('height')) || 600;
+                    viewBox = `0 0 ${width} ${height}`;
+                    clonedSVG.setAttribute('viewBox', viewBox);
+                }
+    
+                // 解析尺寸
+                const [,, vbWidth, vbHeight] = viewBox.split(/\s+|,/).map(Number);
+                const scaleFactor = 2; // 调整为2倍更稳定
+                
+                // 设置物理尺寸（核心修正）
+                clonedSVG.removeAttribute('style'); // 清除可能存在的缩放样式
+                clonedSVG.setAttribute('width', vbWidth * scaleFactor + '');
+                clonedSVG.setAttribute('height', vbHeight * scaleFactor + '');
+                clonedSVG.style.maxWidth = 'none'; // 禁用响应式限制
+    
+                // 构建临时容器
+                tempContainer.style.cssText = `
+                    position: fixed;
+                    top: 20px; left: 20px;  // 调试时可观察位置
+                    z-index: 9999;
+                    background: white;
+                    width: ${vbWidth * scaleFactor}px;
+                    height: ${vbHeight * scaleFactor}px;
+                `;
+                tempContainer.appendChild(clonedSVG);
+                document.body.appendChild(tempContainer);
+    
+                // 延迟确保渲染完成
+                await new Promise(resolve => setTimeout(resolve, 50));
+    
+                // 截图配置（关键参数调整）
+                const canvas = await html2canvas(tempContainer, {
+                    scale: 1,
+                    width: vbWidth * scaleFactor,
+                    height: vbHeight * scaleFactor,
+                    backgroundColor: '#FFFFFF',
+                    logging: true,
+                    useCORS: true,
+                    allowTaint: false,
+                    onclone: (clonedDoc, element) => {
+                        element.querySelector('svg').style.shapeRendering = 'geometricPrecision';
+                    }
+                });
+    
+                // 调试：在页面显示截图结果
+                // canvas.style.border = "2px solid red";
+                // document.body.appendChild(canvas);
+    
+                // 生成下载
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = 'diagram.png';
+                link.click();
+    
+                // 清理DOM
+                tempContainer.remove();
+                
+            } catch (error) {
+                console.error('下载失败:', error);
+                alert(`下载失败: ${error.message}`);
+            }
+        }
+
+        // 放大功能
+        zoomInBtn.addEventListener('click', () => {
+            currentScale += 0.5;
+            updatePreviewScale();
+        });
+
+        // 缩小功能
+        zoomOutBtn.addEventListener('click', () => {
+            currentScale = Math.max(0.5, currentScale - 0.5); // 最小缩放比例为 0.5
+            updatePreviewScale();
+        });
+
+        // 重置缩放功能
+        resetZoomBtn.addEventListener('click', () => {
+            currentScale = 1;
+            updatePreviewScale();
+        });
+
+        // 更新预览缩放比例
+        function updatePreviewScale() {
+            const svgElement = previewDiv.querySelector('.preview-svg');
+            if (svgElement) {
+                svgElement.style.transform = `scale(${currentScale})`;
+            }
+        }
+
+        // 监听鼠标滚轮事件
+        previewDiv.addEventListener('wheel', (event) => {
+            event.preventDefault(); // 阻止默认滚动行为
+            if (event.deltaY > 0) {
+                // 向下滚动：缩小
+                currentScale = Math.max(0.5, currentScale - 0.1);
+            } else {
+                // 向上滚动：放大
+                currentScale += 0.1;
+            }
+            updatePreviewScale();
+        });
+
+        // 事件监听
+        renderBtn.addEventListener('click', renderMermaid);
+        downloadBtn.addEventListener('click', downloadPNG);
+
+        // 初始渲染
+        renderMermaid();
+
+        // 代码变化时自动渲染（节流）
+        let renderTimeout;
+        codeEditor.addEventListener('input', () => {
+            clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(renderMermaid, 500);
+        });
+    </script>
+</body>
+</html>

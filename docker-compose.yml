@@ -1,0 +1,36 @@
+services:
+  mermaid-renderer-backend:
+    # build: .
+    image: ghcr.io/erik-balfe/mermaid-renderer-server:latest
+    container_name: mermaid-renderer-backend
+    ports:
+      - "13022:3022"
+    environment:
+      - PORT=3022
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3022/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - nim_tritonmodel_network
+
+  mermaid-frontend:
+    image: nginx:1.27.0
+    ports:
+      - "18000:80"
+    volumes:
+      - ./src/index.html:/usr/share/nginx/html/index.html
+      - ./frontend-server.js:/app/frontend-server.js
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    environment:
+    #   - PORT=3022
+      - BACKEND_URL = http://mermaid-renderer-backend:3022
+    depends_on:
+      - mermaid-renderer-backend
+    networks:
+      - nim_tritonmodel_network
+
+networks:
+  nim_tritonmodel_network:
+    external: true
